@@ -87,29 +87,65 @@ def _find_repeated_sequence(actions: list[CachedAction]) -> set[int]:
     retry loops like: [input(A), input(B), click(C), input(A), input(B), click(C)]
     where the second triplet is redundant exploration.
 
-    Returns the set of indices to remove (the later duplicate block).
+    Correctness guarantees:
+    - Only CONSECUTIVE repetitions are removed — a single different action
+      in between makes both surrounding blocks immune.
+    - Blocks are only built from positions NOT already in to_remove (no
+      ghost positions): this prevents pattern-matching against actions that
+      won't exist in the final sequence, which could cause false positives.
+    - All param values are normalised to str before comparison to prevent
+      bool/string type drift across serialisation boundaries.
+    - Length=1 is included to catch consecutive duplicate single steps.
+
+    Returns the set of indices to remove (the later duplicate blocks).
     """
     to_remove: set[int] = set()
     n = len(actions)
+    if n < 2:
+        return to_remove
 
     def sig(a: CachedAction) -> tuple:
-        return (a.optexity_action_type, a.command, str(sorted(a.action_params.items())))
+        # Normalise all param values to str — prevents bool vs "True" drift
+        normalized = str(sorted((k, str(v)) for k, v in a.action_params.items()))
+        return (a.optexity_action_type, a.command, normalized)
 
     sigs = [sig(a) for a in actions]
 
-    # Try sub-sequence lengths from 2 up to n//2
-    for length in range(2, n // 2 + 1):
+    for length in range(1, n // 2 + 1):
         i = 0
-        while i <= n - 2 * length:
-            block_a = sigs[i:i + length]
-            block_b = sigs[i + length:i + 2 * length]
-            if block_a == block_b:
-                # Mark second block as redundant
-                for j in range(i + length, i + 2 * length):
-                    to_remove.add(j)
-                i += 2 * length  # skip past both blocks
-            else:
+        while i + length <= n:
+            # Skip positions already marked for removal
+            if i in to_remove:
                 i += 1
+                continue
+
+            # Only build a block from clean (non-removed) positions.
+            # Using ghost positions (already in to_remove) would mean
+            # pattern-matching against actions that won't be in the final
+            # sequence, which can cause false positives.
+            if any(k in to_remove for k in range(i, i + length)):
+                i += 1
+                continue
+
+            block = tuple(sigs[i:i + length])
+
+            # Greedily consume ALL consecutive repetitions of this block.
+            # Earlier algorithm jumped past one pair and missed further
+            # repeats — e.g. [A,B]×5 was reduced to [A,B,A,B,A,B] instead
+            # of [A,B]. The inner while loop now runs until the chain breaks.
+            j = i + length
+            while j + length <= n:
+                # Candidate block must also be free of ghost positions
+                if any(k in to_remove for k in range(j, j + length)):
+                    break
+                if tuple(sigs[j:j + length]) == block:
+                    for k in range(j, j + length):
+                        to_remove.add(k)
+                    j += length
+                else:
+                    break
+
+            i += 1
 
     return to_remove
 
