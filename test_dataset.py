@@ -4,15 +4,20 @@ Cache Dataset Runner
 Runs 5 multi-page automation samples through the Optexity caching pipeline
 and produces a performance comparison table (agentic vs deterministic).
 
+Structure:
+  Phase 1 — All 5 agentic runs back-to-back (establishes caches)
+  Phase 2 — All 5 cache-hit runs back-to-back (deterministic replay)
+  Summary — Comparison table: time / LLM calls / pruning per sample
+
 Usage:
-    # Start the server first:
+    # Terminal 1 — start server:
+    # cd /Users/neelabh/Optexity
     # python -m optexity.inference.child_process --port 9000 --child_process_id 1
 
-    python test_dataset.py
-
-Each sample runs twice:
-  1. Agentic (establishes cache, records LLM calls + time)
-  2. Deterministic (cache hit, records 0 LLM calls + faster time)
+    # Terminal 2 — run dataset:
+    # cd /Users/neelabh/Optexity
+    # export OPTEXITY_TEST_ENDPOINT="your-endpoint-name"
+    # python optexity/test_dataset.py
 """
 
 import asyncio
@@ -23,18 +28,20 @@ from pathlib import Path
 
 import httpx
 
-# ── Server config ────────────────────────────────────────────────────────────
+# ── Config ────────────────────────────────────────────────────────────────────
 SERVER_URL = "http://localhost:9000/inference"
 ENDPOINT = os.environ.get("OPTEXITY_TEST_ENDPOINT", "navigate_from_optexity_dashboard-9ad4c495")
 CACHE_DIR = Path.home() / ".optexity_cache"
 TEST_AUTOMATION_PATH = Path("test_automation.json")
+POLL_INTERVAL = 3
+RUN_TIMEOUT = 300
 
-# ── 5 Test Automations ───────────────────────────────────────────────────────
+# ── 5 Test Samples ────────────────────────────────────────────────────────────
 SAMPLES = [
     {
         "name": "Quotes Login + Humor Tag",
-        "description": "Login to quotes.toscrape.com and navigate to a humor tag",
-        "automation": {
+        "description": "Login to quotes.toscrape.com, navigate to humor tag",
+        "agentic": {
             "url": "https://quotes.toscrape.com",
             "parameters": {
                 "input_parameters": {
@@ -44,319 +51,337 @@ SAMPLES = [
                 },
                 "generated_parameters": {},
             },
-            "nodes": [{
-                "type": "action_node",
-                "interaction_action": {
-                    "agentic_task": {
-                        "task": "Click the Login link, login with username 'admin' and password 'password', then navigate to the 'humor' tag and tell me the author of the first quote on that page",
-                        "max_steps": 20,
-                        "backend": "browser_use",
-                    }
-                },
-            }],
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'admin' and password 'password', then navigate to the 'humor' tag and tell me the author of the first quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
         },
-        "param_variant": {
-            "username": ["john"],
-            "password": ["secret123"],
-            "tag": ["humor"],
-            "task": "Click the Login link, login with username 'john' and password 'secret123', then navigate to the 'humor' tag and tell me the author of the first quote on that page",
+        "cached": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {
+                "input_parameters": {
+                    "username": ["john"],
+                    "password": ["secret123"],
+                    "tag": ["humor"],
+                },
+                "generated_parameters": {},
+            },
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'john' and password 'secret123', then navigate to the 'humor' tag and tell me the author of the first quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
         },
     },
     {
         "name": "Books Mystery Category",
-        "description": "Navigate to Mystery category on books.toscrape.com and open first book",
-        "automation": {
+        "description": "Navigate to Mystery on books.toscrape.com, open first book",
+        "agentic": {
             "url": "https://books.toscrape.com",
-            "parameters": {
-                "input_parameters": {
-                    "category": ["Mystery"],
-                },
-                "generated_parameters": {},
-            },
-            "nodes": [{
-                "type": "action_node",
-                "interaction_action": {
-                    "agentic_task": {
-                        "task": "Navigate to the 'Mystery' category and click on the first book to view its details",
-                        "max_steps": 15,
-                        "backend": "browser_use",
-                    }
-                },
-            }],
+            "parameters": {"input_parameters": {"category": ["Mystery"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Mystery' category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
         },
-        "param_variant": {
-            "category": ["Travel"],
-            "task": "Navigate to the 'Travel' category and click on the first book to view its details",
+        "cached": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Travel"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Travel' category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
         },
     },
     {
         "name": "Herokuapp Login + Secure Area",
-        "description": "Login to the-internet.herokuapp.com and verify secure area",
-        "automation": {
+        "description": "Login to the-internet.herokuapp.com, verify secure area",
+        "agentic": {
             "url": "https://the-internet.herokuapp.com/login",
             "parameters": {
-                "input_parameters": {
-                    "username": ["tomsmith"],
-                    "password": ["SuperSecretPassword!"],
-                },
+                "input_parameters": {"username": ["tomsmith"], "password": ["SuperSecretPassword!"]},
                 "generated_parameters": {},
             },
-            "nodes": [{
-                "type": "action_node",
-                "interaction_action": {
-                    "agentic_task": {
-                        "task": "Login with username 'tomsmith' and password 'SuperSecretPassword!', then verify you are on the secure area page",
-                        "max_steps": 10,
-                        "backend": "browser_use",
-                    }
-                },
-            }],
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Login with username 'tomsmith' and password 'SuperSecretPassword!', then verify you are on the secure area page",
+                "max_steps": 10, "backend": "browser_use",
+            }}}],
         },
-        "param_variant": {
-            "username": ["tomsmith"],
-            "password": ["SuperSecretPassword!"],
-            "task": "Login with username 'tomsmith' and password 'SuperSecretPassword!', then verify you are on the secure area page",
+        "cached": {
+            "url": "https://the-internet.herokuapp.com/login",
+            "parameters": {
+                "input_parameters": {"username": ["tomsmith"], "password": ["SuperSecretPassword!"]},
+                "generated_parameters": {},
+            },
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Login with username 'tomsmith' and password 'SuperSecretPassword!', then verify you are on the secure area page",
+                "max_steps": 10, "backend": "browser_use",
+            }}}],
         },
     },
     {
         "name": "Quotes Login + Inspirational Tag",
-        "description": "Login and navigate to a different tag — tests parameterized cache reuse",
-        "automation": {
+        "description": "Same login flow, different tag — tests parameterized cache reuse",
+        "agentic": {
             "url": "https://quotes.toscrape.com",
             "parameters": {
-                "input_parameters": {
-                    "username": ["admin"],
-                    "password": ["password"],
-                    "tag": ["inspirational"],
-                },
+                "input_parameters": {"username": ["admin"], "password": ["password"], "tag": ["inspirational"]},
                 "generated_parameters": {},
             },
-            "nodes": [{
-                "type": "action_node",
-                "interaction_action": {
-                    "agentic_task": {
-                        "task": "Click the Login link, login with username 'admin' and password 'password', then navigate to the 'inspirational' tag and tell me the author of the first quote on that page",
-                        "max_steps": 20,
-                        "backend": "browser_use",
-                    }
-                },
-            }],
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'admin' and password 'password', then navigate to the 'inspirational' tag and tell me the author of the first quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
         },
-        "param_variant": {
-            "username": ["admin"],
-            "password": ["password"],
-            "tag": ["life"],
-            "task": "Click the Login link, login with username 'admin' and password 'password', then navigate to the 'life' tag and tell me the author of the first quote on that page",
+        "cached": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {
+                "input_parameters": {"username": ["john"], "password": ["secret123"], "tag": ["inspirational"]},
+                "generated_parameters": {},
+            },
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'john' and password 'secret123', then navigate to the 'inspirational' tag and tell me the author of the first quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
         },
     },
     {
-        "name": "Books Science Fiction Category",
-        "description": "Navigate to Science Fiction category and view first book details",
-        "automation": {
+        "name": "Books Science Fiction",
+        "description": "Navigate to Science Fiction category, open first book",
+        "agentic": {
             "url": "https://books.toscrape.com",
-            "parameters": {
-                "input_parameters": {
-                    "category": ["Science Fiction"],
-                },
-                "generated_parameters": {},
-            },
-            "nodes": [{
-                "type": "action_node",
-                "interaction_action": {
-                    "agentic_task": {
-                        "task": "Navigate to the 'Science Fiction' category and click on the first book to view its details",
-                        "max_steps": 15,
-                        "backend": "browser_use",
-                    }
-                },
-            }],
+            "parameters": {"input_parameters": {"category": ["Science Fiction"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Science Fiction' category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
         },
-        "param_variant": {
-            "category": ["Historical Fiction"],
-            "task": "Navigate to the 'Historical Fiction' category and click on the first book to view its details",
+        "cached": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Historical Fiction"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Historical Fiction' category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
         },
     },
 ]
 
 
-def write_test_automation(automation: dict) -> None:
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def write_automation(automation: dict) -> None:
     TEST_AUTOMATION_PATH.write_text(json.dumps(automation, indent=2))
 
 
-def find_cache_file() -> Path | None:
-    """Find the most recently modified cache file."""
-    files = sorted(CACHE_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
-    return files[0] if files else None
+def clear_cache() -> None:
+    """Remove all cache files so Phase 1 always runs agentically."""
+    if CACHE_DIR.exists():
+        removed = list(CACHE_DIR.glob("*.json"))
+        for f in removed:
+            f.unlink()
+        if removed:
+            print(f"  🗑  Cleared {len(removed)} existing cache file(s)\n")
 
 
-async def run_inference(timeout: int = 300) -> tuple[bool, float]:
-    """POST to /inference and wait for the task to appear in logs."""
-    start = time.perf_counter()
+def snapshot_cache() -> dict[str, float]:
+    if not CACHE_DIR.exists():
+        return {}
+    return {str(f): f.stat().st_mtime for f in CACHE_DIR.glob("*.json")}
+
+
+def find_updated_cache(before: dict[str, float]) -> Path | None:
+    if not CACHE_DIR.exists():
+        return None
+    for f in sorted(CACHE_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+        key = str(f)
+        if key not in before or f.stat().st_mtime > before[key]:
+            return f
+    return None
+
+
+async def trigger_run() -> bool:
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            SERVER_URL,
-            json={
-                "endpoint_name": ENDPOINT,
-                "input_parameters": {"target_url": ["https://stockanalysis.com/"]},
-                "max_timeout_in_minutes": timeout // 60,
-            },
-        )
-        if not resp.is_success:
-            print(f"  ✗ Request failed: {resp.text}")
-            return False, 0.0
+        try:
+            resp = await client.post(
+                SERVER_URL,
+                json={
+                    "endpoint_name": ENDPOINT,
+                    "input_parameters": {"target_url": ["https://stockanalysis.com/"]},
+                    "max_timeout_in_minutes": RUN_TIMEOUT // 60,
+                },
+            )
+            return resp.is_success
+        except Exception as exc:
+            print(f"\n  ✗ Request error: {exc}")
+            return False
 
-    # Wait for cache file to be written / updated
-    print("  ⏳ Waiting for automation to complete...", end="", flush=True)
-    cache_before = {f: f.stat().st_mtime for f in CACHE_DIR.glob("*.json")} if CACHE_DIR.exists() else {}
 
-    deadline = time.time() + timeout
+async def wait_for_cache_update(before: dict[str, float]) -> tuple[Path | None, float]:
+    t0 = time.perf_counter()
+    deadline = time.time() + RUN_TIMEOUT
     while time.time() < deadline:
-        await asyncio.sleep(3)
+        await asyncio.sleep(POLL_INTERVAL)
         print(".", end="", flush=True)
-        if CACHE_DIR.exists():
-            for f in CACHE_DIR.glob("*.json"):
-                if f not in cache_before or f.stat().st_mtime > cache_before.get(f, 0):
-                    elapsed = time.perf_counter() - start
-                    print(f" done ({elapsed:.1f}s)")
-                    return True, elapsed
-    print(" timeout!")
-    return False, 0.0
+        path = find_updated_cache(before)
+        if path:
+            return path, time.perf_counter() - t0
+    return None, time.perf_counter() - t0
 
 
-def read_cache_summary(cache_file: Path) -> dict:
+def read_metrics(cache_file: Path) -> dict:
     data = json.loads(cache_file.read_text())
+    am = data.get("agentic_metrics") or {}
+    hits = data.get("cache_hit_metrics") or []
     return {
         "hash": data.get("task_hash", "?"),
         "actions": len(data.get("actions", [])),
-        "agentic_metrics": data.get("agentic_metrics"),
-        "cache_hit_metrics": data.get("cache_hit_metrics", []),
+        "agentic_time": am.get("elapsed_seconds"),
+        "agentic_llm": am.get("llm_calls"),
+        "raw_steps": am.get("raw_step_count"),
+        "pruned": am.get("pruned_count"),
+        "hits": hits,
         "run_count": data.get("run_count", 1),
     }
 
 
-def print_table(results: list[dict]) -> None:
-    print("\n" + "=" * 100)
-    print("CACHE PERFORMANCE DATASET")
-    print("=" * 100)
-    header = f"{'Sample':<35} {'Steps':>6} {'Agentic(s)':>10} {'LLM calls':>10} {'Cache(s)':>9} {'Speedup':>9} {'LLM saved':>10}"
-    print(header)
-    print("-" * 100)
+def fmt(v, suffix="") -> str:
+    return "?" if v is None else f"{v}{suffix}"
 
-    for r in results:
-        if r.get("error"):
-            print(f"{r['name']:<35} {'ERROR':>6}")
-            continue
 
-        am = r.get("agentic_metrics") or {}
-        hits = r.get("cache_hit_metrics", [])
-        avg_hit = sum(h["elapsed_seconds"] for h in hits) / len(hits) if hits else 0
-        speedup = (am.get("elapsed_seconds", 0) / avg_hit) if avg_hit > 0 else 0
-
-        print(
-            f"{r['name']:<35}"
-            f"{r['actions']:>6}"
-            f"{am.get('elapsed_seconds', 0):>10.2f}"
-            f"{am.get('llm_calls', 0):>10}"
-            f"{avg_hit:>9.2f}"
-            f"{speedup:>8.1f}x"
-            f"{'100%':>10}"
-        )
-
-    print("=" * 100)
-    print("\nPruning summary:")
-    for r in results:
-        am = r.get("agentic_metrics") or {}
-        if am.get("raw_step_count") and am.get("pruned_count") is not None:
-            print(
-                f"  {r['name']}: {am['raw_step_count']} raw → "
-                f"{am['raw_step_count'] - am['pruned_count']} cached "
-                f"({am['pruned_count']} redundant steps pruned)"
-            )
-
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 async def main():
     print("Optexity Cache Dataset Runner")
-    print(f"Server: {SERVER_URL}")
+    print(f"Server:    {SERVER_URL}")
+    print(f"Endpoint:  {ENDPOINT}")
     print(f"Cache dir: {CACHE_DIR}\n")
 
-    if not CACHE_DIR.exists():
-        CACHE_DIR.mkdir(parents=True)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    clear_cache()
 
-    results = []
+    cache_files: list[Path | None] = [None] * len(SAMPLES)
+    agentic_wall = [0.0] * len(SAMPLES)
+    cached_wall  = [0.0] * len(SAMPLES)
 
-    for i, sample in enumerate(SAMPLES, 1):
-        print(f"\n[{i}/5] {sample['name']}")
-        print(f"  {sample['description']}")
+    # ── PHASE 1: All agentic runs ─────────────────────────────────────────────
+    phase1_start = time.perf_counter()
+    print("=" * 72)
+    print("PHASE 1 — Agentic runs  (LLM reasons through each task from scratch)")
+    print("=" * 72)
 
-        # ── Run 1: Agentic ───────────────────────────────────────────────────
-        print("  → Run 1 (agentic):")
-        write_test_automation(sample["automation"])
+    for i, sample in enumerate(SAMPLES):
+        print(f"\n[{i+1}/5] {sample['name']}")
+        write_automation(sample["agentic"])
         await asyncio.sleep(2)
 
-        ok, _ = await run_inference()
-        if not ok:
-            results.append({"name": sample["name"], "error": True})
+        before = snapshot_cache()
+        if not await trigger_run():
+            print("  ✗ Failed to trigger")
             continue
 
-        cache_file = find_cache_file()
+        print("  ⏳ Agentic run...", end="", flush=True)
+        cache_file, elapsed = await wait_for_cache_update(before)
+        agentic_wall[i] = elapsed
+
         if not cache_file:
-            results.append({"name": sample["name"], "error": True})
+            print(" ✗ Timed out")
             continue
 
-        summary = read_cache_summary(cache_file)
-        am = summary.get("agentic_metrics") or {}
+        cache_files[i] = cache_file
+        m = read_metrics(cache_file)
         print(
-            f"  ✓ Cached {summary['actions']} actions | "
-            f"{am.get('elapsed_seconds', '?')}s | "
-            f"{am.get('llm_calls', '?')} LLM calls | "
-            f"pruned {am.get('pruned_count', 0)} steps"
+            f" ✓  wall={elapsed:.1f}s | agent={fmt(m['agentic_time'])}s | "
+            f"llm_calls={fmt(m['agentic_llm'])} | "
+            f"steps={m['actions']} | pruned={fmt(m['pruned'])}"
         )
 
-        # ── Run 2: Cache hit with param variant ─────────────────────────────
-        print("  → Run 2 (cache hit with param variant):")
-        variant = sample["param_variant"]
-        variant_automation = json.loads(json.dumps(sample["automation"]))
-        variant_automation["parameters"]["input_parameters"] = {
-            k: v for k, v in variant.items() if k != "task"
-        }
-        if "task" in variant:
-            variant_automation["nodes"][0]["interaction_action"]["agentic_task"]["task"] = variant["task"]
+    phase1_total = time.perf_counter() - phase1_start
+    print(f"\n  Phase 1 total wall time: {phase1_total:.1f}s")
 
-        write_test_automation(variant_automation)
+    # ── PHASE 2: All cache-hit runs ───────────────────────────────────────────
+    phase2_start = time.perf_counter()
+    print("\n" + "=" * 72)
+    print("PHASE 2 — Cache-hit runs  (deterministic, 0 LLM calls)")
+    print("=" * 72)
+
+    for i, sample in enumerate(SAMPLES):
+        print(f"\n[{i+1}/5] {sample['name']}")
+        write_automation(sample["cached"])
         await asyncio.sleep(2)
 
-        ok, _ = await run_inference()
-        if not ok:
-            results.append({"name": sample["name"], "error": True, **summary})
+        before = snapshot_cache()
+        if not await trigger_run():
+            print("  ✗ Failed to trigger")
             continue
 
-        summary2 = read_cache_summary(cache_file)
-        hits = summary2.get("cache_hit_metrics", [])
-        if hits:
-            last_hit = hits[-1]
-            print(
-                f"  ✓ Replayed {summary2['actions']} steps | "
-                f"{last_hit['elapsed_seconds']}s | "
-                f"0 LLM calls | run_count={summary2['run_count']}"
-            )
+        print("  ⏳ Cache replay...", end="", flush=True)
+        cache_file, elapsed = await wait_for_cache_update(before)
+        cached_wall[i] = elapsed
 
-        results.append({
-            "name": sample["name"],
-            "actions": summary2["actions"],
-            "agentic_metrics": summary2.get("agentic_metrics"),
-            "cache_hit_metrics": summary2.get("cache_hit_metrics", []),
-        })
+        if not cache_file:
+            print(" ✗ Timed out")
+            continue
 
-        # Save individual result JSON
-        result_path = Path(f"cache_result_{i}_{sample['name'].lower().replace(' ', '_')}.json")
-        result_path.write_text(json.dumps(summary2, indent=2, default=str))
-        print(f"  → Saved: {result_path}")
+        if cache_files[i] is None:
+            cache_files[i] = cache_file
 
-    # Restore last automation
-    write_test_automation(SAMPLES[0]["automation"])
+        m = read_metrics(cache_file)
+        last_hit = (m["hits"] or [{}])[-1]
+        print(
+            f" ✓  wall={elapsed:.1f}s | replay={fmt(last_hit.get('elapsed_seconds'))}s | "
+            f"llm_calls=0 | run_count={m['run_count']}"
+        )
 
-    print_table(results)
-    print("\nDone! Individual result JSONs saved in current directory.")
+    phase2_total = time.perf_counter() - phase2_start
+    print(f"\n  Phase 2 total wall time: {phase2_total:.1f}s")
+
+    # ── SUMMARY ───────────────────────────────────────────────────────────────
+    print("\n\n" + "=" * 92)
+    print("PERFORMANCE COMPARISON SUMMARY")
+    print("=" * 92)
+    print(f"{'Sample':<35} {'Steps':>5} {'Agentic(s)':>10} {'LLM calls':>10} {'Cache(s)':>9} {'Speedup':>8} {'Pruned':>7}")
+    print("-" * 92)
+
+    for i, sample in enumerate(SAMPLES):
+        if not cache_files[i]:
+            print(f"{sample['name']:<35}  (no data)")
+            continue
+        m = read_metrics(cache_files[i])
+        hits = m["hits"]
+        avg_hit = sum(h["elapsed_seconds"] for h in hits) / len(hits) if hits else None
+        at = m["agentic_time"]
+        speedup = f"{at/avg_hit:.1f}x" if at and avg_hit else "?"
+        print(
+            f"{sample['name']:<35}"
+            f"{m['actions']:>5}"
+            f"{fmt(at, 's'):>10}"
+            f"{fmt(m['agentic_llm']):>10}"
+            f"{(fmt(round(avg_hit,2), 's') if avg_hit else '?'):>9}"
+            f"{speedup:>8}"
+            f"{fmt(m['pruned']):>7}"
+        )
+
+    print("=" * 92)
+    speedup_str = f"{phase1_total/phase2_total:.1f}x" if phase2_total > 0 else "?"
+    print(f"\n  Phase 1 (all agentic) :  {phase1_total:.1f}s")
+    print(f"  Phase 2 (all cached)  :  {phase2_total:.1f}s")
+    print(f"  Total speedup         :  {speedup_str} faster end-to-end")
+    print(f"  LLM savings           :  100% (Phase 2 = 0 calls vs Phase 1 = N×steps)")
+
+    # Save per-sample result JSONs
+    print()
+    for i, sample in enumerate(SAMPLES):
+        if cache_files[i]:
+            slug = sample['name'].lower().replace(' ', '_').replace('+', '').replace('__', '_')
+            out = Path(f"cache_result_{i+1}_{slug}.json")
+            data = json.loads(cache_files[i].read_text())
+            data["wall_time_agentic_s"] = round(agentic_wall[i], 2)
+            data["wall_time_cached_s"]  = round(cached_wall[i], 2)
+            out.write_text(json.dumps(data, indent=2, default=str))
+            print(f"  → {out}")
+
+    write_automation(SAMPLES[0]["agentic"])
+    print("\nDone!")
 
 
 if __name__ == "__main__":
