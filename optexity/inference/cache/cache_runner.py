@@ -128,6 +128,12 @@ async def _try_upgrade_locator(ca: CachedAction, browser: Browser) -> bool:
     if not ca.command or ca.optexity_action_type in ("go_to_url", "go_back", "scroll"):
         return False
 
+    # Skip if a previous hit already determined no better locator exists.
+    # This avoids repeated expensive JS evaluation via locator_from_playwright()
+    # on navigation-heavy automations with xpath-only locators.
+    if ca.upgrade_locked:
+        return False
+
     try:
         from optexity.inference.core.interaction.utils import LocatorExtraction
 
@@ -173,10 +179,13 @@ async def _try_upgrade_locator(ca: CachedAction, browser: Browser) -> bool:
             ca.locator_kind = candidate["kind"]
             return True
 
-        return False  # no better unique locator found
+        # No better unique locator found — lock to skip future attempts
+        ca.upgrade_locked = True
+        return False
 
     except Exception as exc:
         logger.debug(f"[cache_runner] Locator upgrade skipped for step {ca.step_index}: {exc}")
+        ca.upgrade_locked = True
         return False
 
 

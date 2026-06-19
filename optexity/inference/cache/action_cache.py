@@ -54,6 +54,12 @@ class CachedAction(BaseModel):
     failure_count: int = 0
     """Number of times this cached step has failed."""
 
+    upgrade_locked: bool = False
+    """Set True once a locator upgrade attempt found no improvement.
+    Prevents repeated expensive locator_from_playwright() JS evaluations
+    on subsequent cache hits for locators that are already optimal (e.g.
+    xpath elements with no stable id/role/href alternative)."""
+
 
 class RunMetrics(BaseModel):
     """Performance metrics for a single execution run."""

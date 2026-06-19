@@ -1,7 +1,7 @@
 """
 Cache Dataset Runner
 ====================
-Runs 5 multi-page automation samples through the Optexity caching pipeline
+Runs 20 multi-page automation samples through the Optexity caching pipeline
 and produces a performance comparison table (agentic vs deterministic).
 
 Structure:
@@ -164,6 +164,308 @@ SAMPLES = [
             }}}],
         },
     },
+
+    # ── 6-20: Additional samples ─────────────────────────────────────────────
+    {
+        "name": "Quotes Login + Love Tag",
+        "description": "Login and navigate to love tag — parameterized cache reuse with new tag",
+        "agentic": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["admin"], "password": ["password"], "tag": ["love"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'admin' and password 'password', then navigate to the 'love' tag and tell me the author of the first quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["alice"], "password": ["pass456"], "tag": ["love"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'alice' and password 'pass456', then navigate to the 'love' tag and tell me the author of the first quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Quotes Login + Life Tag",
+        "description": "Login and navigate to life tag",
+        "agentic": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["admin"], "password": ["password"], "tag": ["life"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'admin' and password 'password', then navigate to the 'life' tag and tell me the author of the first quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["bob"], "password": ["mypass"], "tag": ["life"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'bob' and password 'mypass', then navigate to the 'life' tag and tell me the author of the first quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Books Fantasy Category",
+        "description": "Navigate to Fantasy category and view first book",
+        "agentic": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Fantasy"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Fantasy' category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Horror"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Horror' category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Books Romance Category",
+        "description": "Navigate to Romance category and view first book",
+        "agentic": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Romance"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Romance' category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Crime"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Crime' category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Quotes Login + Wisdom Tag",
+        "description": "Login and navigate to wisdom tag",
+        "agentic": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["admin"], "password": ["password"], "tag": ["humor"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'admin' and password 'password', then navigate to the 'humor' tag and note how many quotes are on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["carol"], "password": ["carol99"], "tag": ["humor"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'carol' and password 'carol99', then navigate to the 'humor' tag and note how many quotes are on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Books Children Category",
+        "description": "Navigate to Children's category and view first book",
+        "agentic": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Children's"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the \"Children's\" category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Poetry"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Poetry' category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Herokuapp Add/Remove Elements",
+        "description": "Navigate to add_remove_elements page and add 3 elements",
+        "agentic": {
+            "url": "https://the-internet.herokuapp.com/add_remove_elements/",
+            "parameters": {"input_parameters": {}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the 'Add Element' button 3 times to add 3 elements to the page, then tell me how many Delete buttons are visible",
+                "max_steps": 10, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://the-internet.herokuapp.com/add_remove_elements/",
+            "parameters": {"input_parameters": {}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the 'Add Element' button 3 times to add 3 elements to the page, then tell me how many Delete buttons are visible",
+                "max_steps": 10, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Quotes Login + Deep Thoughts Tag",
+        "description": "Login and navigate to deep-thoughts tag",
+        "agentic": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["admin"], "password": ["password"], "tag": ["inspirational"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'admin' and password 'password', then navigate to the 'inspirational' tag and tell me the text of the first quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["dave"], "password": ["dave123"], "tag": ["inspirational"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'dave' and password 'dave123', then navigate to the 'inspirational' tag and tell me the text of the first quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Books Humor Category",
+        "description": "Navigate to Humor category and view first book",
+        "agentic": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Humor"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Humor' category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Sequential Art"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Sequential Art' category and click on the first book to view its details",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Herokuapp Dropdown Select",
+        "description": "Navigate to dropdown page and select an option",
+        "agentic": {
+            "url": "https://the-internet.herokuapp.com/dropdown",
+            "parameters": {"input_parameters": {}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Select 'Option 2' from the dropdown on this page and confirm it is selected",
+                "max_steps": 8, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://the-internet.herokuapp.com/dropdown",
+            "parameters": {"input_parameters": {}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Select 'Option 2' from the dropdown on this page and confirm it is selected",
+                "max_steps": 8, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Quotes Login + Friendship Tag",
+        "description": "Login and navigate to friendship tag",
+        "agentic": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["admin"], "password": ["password"], "tag": ["love"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'admin' and password 'password', then navigate to the 'love' tag and tell me the author of the second quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["eve"], "password": ["evepass"], "tag": ["love"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'eve' and password 'evepass', then navigate to the 'love' tag and tell me the author of the second quote on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Books Biography Category",
+        "description": "Navigate to Biography category and view first book",
+        "agentic": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Biography"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Biography' category and click on the first book to view its title and price",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {"category": ["Classics"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Navigate to the 'Classics' category and click on the first book to view its title and price",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Quotes Login + Truth Tag",
+        "description": "Login and navigate to truth tag — varied credentials",
+        "agentic": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["admin"], "password": ["password"], "tag": ["humor"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'admin' and password 'password', then navigate to the 'humor' tag and tell me the author of the last quote visible on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["frank"], "password": ["frank22"], "tag": ["humor"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'frank' and password 'frank22', then navigate to the 'humor' tag and tell me the author of the last quote visible on that page",
+                "max_steps": 20, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Books Default Catalogue",
+        "description": "View the default catalogue and click second book",
+        "agentic": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "On the main books page, click on the second book listed and tell me its title and price",
+                "max_steps": 10, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://books.toscrape.com",
+            "parameters": {"input_parameters": {}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "On the main books page, click on the second book listed and tell me its title and price",
+                "max_steps": 10, "backend": "browser_use",
+            }}}],
+        },
+    },
+    {
+        "name": "Quotes Logout Flow",
+        "description": "Login then immediately log out — tests multi-step navigation with state change",
+        "agentic": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["admin"], "password": ["password"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'admin' and password 'password', verify you are logged in by checking for a Logout link, then click Logout and confirm you are back on the main page",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+        "cached": {
+            "url": "https://quotes.toscrape.com",
+            "parameters": {"input_parameters": {"username": ["grace"], "password": ["grace88"]}, "generated_parameters": {}},
+            "nodes": [{"type": "action_node", "interaction_action": {"agentic_task": {
+                "task": "Click the Login link, login with username 'grace' and password 'grace88', verify you are logged in by checking for a Logout link, then click Logout and confirm you are back on the main page",
+                "max_steps": 15, "backend": "browser_use",
+            }}}],
+        },
+    },
 ]
 
 
@@ -270,7 +572,7 @@ async def main():
     print("=" * 72)
 
     for i, sample in enumerate(SAMPLES):
-        print(f"\n[{i+1}/5] {sample['name']}")
+        print(f"\n[{i+1}/{len(SAMPLES)}] {sample['name']}")
         write_automation(sample["agentic"])
         await asyncio.sleep(2)
 
@@ -305,7 +607,7 @@ async def main():
     print("=" * 72)
 
     for i, sample in enumerate(SAMPLES):
-        print(f"\n[{i+1}/5] {sample['name']}")
+        print(f"\n[{i+1}/{len(SAMPLES)}] {sample['name']}")
         write_automation(sample["cached"])
         await asyncio.sleep(2)
 
@@ -367,6 +669,9 @@ async def main():
     print(f"  Phase 2 (all cached)  :  {phase2_total:.1f}s")
     print(f"  Total speedup         :  {speedup_str} faster end-to-end")
     print(f"  LLM savings           :  100% (Phase 2 = 0 calls vs Phase 1 = N×steps)")
+
+    # Restore first automation
+    write_automation(SAMPLES[0]["agentic"])
 
     # Save per-sample result JSONs
     print()
