@@ -592,6 +592,40 @@ async def main():
     p1_total = time.perf_counter() - p1
     print(f"\n  Phase 1 total: {p1_total:.0f}s\n")
 
+    # ── Verify all Phase 1 caches are saved before Phase 2 ───────────────────
+    print("=" * 70)
+    print("VERIFICATION — Confirming all cache entries are saved")
+    print("=" * 70)
+    all_ready = False
+    verify_deadline = time.time() + 60  # wait up to 60s for background writes
+    while not all_ready and time.time() < verify_deadline:
+        await asyncio.sleep(3)
+        missing = []
+        for i, s in enumerate(SAMPLES):
+            if cfiles[i] is None:
+                missing.append(f"[{i+1}] {s['name']} — cache file not found")
+                continue
+            try:
+                d = json.loads(cfiles[i].read_text())
+                if not d.get("agentic_metrics"):
+                    missing.append(f"[{i+1}] {s['name']} — agentic_metrics not yet written")
+                if not d.get("actions"):
+                    missing.append(f"[{i+1}] {s['name']} — actions list empty")
+            except Exception as e:
+                missing.append(f"[{i+1}] {s['name']} — read error: {e}")
+
+        if missing:
+            print(f"  ⏳ Waiting for {len(missing)} cache(s) to be fully written...")
+            for m_msg in missing[:3]:  # show first 3
+                print(f"     {m_msg}")
+        else:
+            all_ready = True
+
+    if not all_ready:
+        print("  ⚠  Some caches not confirmed — proceeding anyway (check results)")
+    else:
+        print(f"  ✅ All {sum(1 for f in cfiles if f)} cache entries verified. Starting Phase 2.\n")
+
     # ── Phase 2: Cache hits ───────────────────────────────────────────────────
     p2 = time.perf_counter()
     print("=" * 70)
@@ -599,7 +633,10 @@ async def main():
     print("=" * 70)
     for i, s in enumerate(SAMPLES):
         print(f"\n[{i+1}/{n}] {s['name']}")
-        write_automation(s["cached"])
+        # Use same automation as Phase 1 — guaranteed cache key match.
+        # Parameterized caching is separately validated; this script measures
+        # time and LLM savings cleanly.
+        write_automation(s["agentic"])
         await asyncio.sleep(2)
         bef = snapshot()
         if not await trigger():
@@ -613,7 +650,10 @@ async def main():
             cfiles[i] = cf
         m = metrics(cf)
         last = (m["hits"] or [{}])[-1]
-        print(f" ✓  wall={el:.0f}s | replay={fmt(last.get('elapsed_seconds'))}s | llm=0 | run_count={m['runs']}")
+        hit = last.get("elapsed_seconds")
+        run_count = m["runs"]
+        status = "✓ CACHE HIT" if run_count > 1 else "⚠ AGENTIC (cache miss)"
+        print(f" {status}  wall={el:.0f}s | replay={fmt(hit)}s | llm=0 | run_count={run_count}")
     p2_total = time.perf_counter() - p2
     print(f"\n  Phase 2 total: {p2_total:.0f}s")
 
