@@ -8,7 +8,7 @@ from pathlib import Path
 from browser_use import Agent, BrowserSession, ChatGoogle, Tools
 from browser_use.agent.views import AgentHistoryList
 
-from optexity.inference.cache.action_cache import AgenticTaskCache
+from optexity.inference.cache.action_cache import AgenticTaskCache, RunMetrics
 from optexity.inference.cache.cache_manager import (
     compute_cache_key,
     load_cache,
@@ -204,6 +204,15 @@ async def handle_agentic_task(
                     existing_cache.run_count += 1
                     existing_cache.last_run_at = datetime.now(timezone.utc)
 
+                    # Record cache hit metrics
+                    existing_cache.cache_hit_metrics.append(RunMetrics(
+                        elapsed_seconds=round(elapsed, 2),
+                        llm_calls=0,
+                        step_count=len(existing_cache.actions),
+                        was_cache_hit=True,
+                        locators_upgraded=1 if any_upgraded else 0,
+                    ))
+
                     # ── [Bonus 2] Iterative optimizer — prune on every cache hit ──
                     pre_count = len(existing_cache.actions)
                     pruned = prune_redundant_actions(list(existing_cache.actions))
@@ -227,10 +236,18 @@ async def handle_agentic_task(
                             task, existing_cache, "test_automation_cached.json"
                         )
                     save_cache(cache_key, existing_cache)
+                    summary = existing_cache.summary()
                     logger.info(
                         f"[cache] Replay succeeded in {elapsed:.2f}s — "
                         f"0 LLM calls used. (run_count={existing_cache.run_count})"
                     )
+                    if "speedup" in summary:
+                        logger.info(
+                            f"[metrics] Speedup: {summary['speedup']} | "
+                            f"LLM savings: {summary['llm_savings']} | "
+                            f"Agentic: {summary['agentic']['time_s']}s / "
+                            f"Cache: {summary['cache_hit']['avg_time_s']}s"
+                        )
                     return
                 else:
                     logger.warning(
@@ -322,8 +339,16 @@ async def handle_agentic_task(
                         last_run_at=datetime.now(timezone.utc),
                         run_count=1,
                         original_task=agentic_task_action.task,
-                        actions=pruned_actions,  # store already-optimized actions
+                        actions=pruned_actions,
                         raw_history_summary=raw_summary,
+                        agentic_metrics=RunMetrics(
+                            elapsed_seconds=round(elapsed_agentic, 2),
+                            llm_calls=len(agent_history.history),
+                            step_count=len(agent_history.history),
+                            raw_step_count=raw_count,
+                            pruned_count=pruned_count,
+                            was_cache_hit=False,
+                        ),
                     )
                     save_cache(cache_key, new_cache)
                     _write_cached_automation_json(task, new_cache)
