@@ -16,10 +16,12 @@ Usage:
     python optexity/test_dataset.py
 """
 
+import argparse
 import asyncio
 import json
 import os
 import re
+import sys
 import time
 from pathlib import Path
 
@@ -559,72 +561,119 @@ def fmt(v, s="") -> str:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+def load_existing_caches(n: int) -> list[Path | None]:
+    """Load existing cache files from ~/.optexity_cache/ by computing
+    the expected cache key for each sample. Used by --phase2-only mode."""
+    # Import here to avoid circular issues when running standalone
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        from optexity.inference.cache.cache_manager import compute_cache_key
+    except ImportError:
+        print("  ⚠  Could not import compute_cache_key — locating caches by mtime instead")
+        files = sorted(CACHE_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)
+        return files[:n] + [None] * max(0, n - len(files))
+
+    cfiles = [None] * n
+    for i, s in enumerate(SAMPLES):
+        a = s["agentic"]
+        task_text = a["nodes"][0]["interaction_action"]["agentic_task"]["task"]
+        base_url = a["url"]
+        raw_params = a["parameters"].get("input_parameters", {})
+        input_params = {k: [str(v) for v in vs] for k, vs in raw_params.items()} if raw_params else None
+        key = compute_cache_key(task_text, base_url, input_params)
+        path = CACHE_DIR / f"{key}.json"
+        if path.exists():
+            cfiles[i] = path
+            print(f"  ✓ [{i+1}] {s['name']} → {key}.json")
+        else:
+            print(f"  ✗ [{i+1}] {s['name']} — cache not found (key={key})")
+    return cfiles
+
+
 async def main():
+    parser = argparse.ArgumentParser(description="Optexity Cache Dataset Runner")
+    parser.add_argument(
+        "--phase2-only",
+        action="store_true",
+        help="Skip Phase 1 and run only Phase 2 using existing caches. "
+             "Use this after restarting the server to get a fresh browser session.",
+    )
+    args = parser.parse_args()
+
     n = len(SAMPLES)
     print(f"Optexity Cache Dataset — {n} samples across 5 websites\n")
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    clear_cache()
 
     cfiles = [None] * n
     aw = [0.0] * n
     cw = [0.0] * n
+    p1_total = 0.0
 
-    # ── Phase 1: Agentic ──────────────────────────────────────────────────────
-    p1 = time.perf_counter()
-    print("=" * 70)
-    print("PHASE 1 — Agentic  (LLM reasons through each task from scratch)")
-    print("=" * 70)
-    for i, s in enumerate(SAMPLES):
-        print(f"\n[{i+1}/{n}] {s['name']}  (target {s['target_steps']} steps)")
-        write_automation(s["agentic"])
-        await asyncio.sleep(2)
-        bef = snapshot()
-        if not await trigger():
-            continue
-        print("  ⏳", end="", flush=True)
-        cf, el = await poll(bef)
-        aw[i] = el
-        if not cf:
-            print(" ✗ timeout"); continue
-        cfiles[i] = cf
-        m = metrics(cf)
-        print(f" ✓  wall={el:.0f}s | agent={fmt(m['at'])}s | llm={fmt(m['llm'])} | steps={m['actions']} | pruned={fmt(m['pruned'])}")
-    p1_total = time.perf_counter() - p1
-    print(f"\n  Phase 1 total: {p1_total:.0f}s\n")
-
-    # ── Verify all Phase 1 caches are saved before Phase 2 ───────────────────
-    print("=" * 70)
-    print("VERIFICATION — Confirming all cache entries are saved")
-    print("=" * 70)
-    all_ready = False
-    verify_deadline = time.time() + 60  # wait up to 60s for background writes
-    while not all_ready and time.time() < verify_deadline:
-        await asyncio.sleep(3)
-        missing = []
-        for i, s in enumerate(SAMPLES):
-            if cfiles[i] is None:
-                missing.append(f"[{i+1}] {s['name']} — cache file not found")
-                continue
-            try:
-                d = json.loads(cfiles[i].read_text())
-                if not d.get("agentic_metrics"):
-                    missing.append(f"[{i+1}] {s['name']} — agentic_metrics not yet written")
-                if not d.get("actions"):
-                    missing.append(f"[{i+1}] {s['name']} — actions list empty")
-            except Exception as e:
-                missing.append(f"[{i+1}] {s['name']} — read error: {e}")
-
-        if missing:
-            print(f"  ⏳ Waiting for {len(missing)} cache(s) to be fully written...")
-            for m_msg in missing[:3]:  # show first 3
-                print(f"     {m_msg}")
-        else:
-            all_ready = True
-
-    if not all_ready:
-        print("  ⚠  Some caches not confirmed — proceeding anyway (check results)")
+    if args.phase2_only:
+        print("=" * 70)
+        print("--phase2-only: loading existing caches from ~/.optexity_cache/")
+        print("=" * 70)
+        cfiles = load_existing_caches(n)
+        found = sum(1 for f in cfiles if f is not None)
+        print(f"\n  Found {found}/{n} cache files. Starting Phase 2.\n")
     else:
-        print(f"  ✅ All {sum(1 for f in cfiles if f)} cache entries verified. Starting Phase 2.\n")
+        clear_cache()
+
+        # ── Phase 1: Agentic ──────────────────────────────────────────────────
+        p1 = time.perf_counter()
+        print("=" * 70)
+        print("PHASE 1 — Agentic  (LLM reasons through each task from scratch)")
+        print("=" * 70)
+        for i, s in enumerate(SAMPLES):
+            print(f"\n[{i+1}/{n}] {s['name']}  (target {s['target_steps']} steps)")
+            write_automation(s["agentic"])
+            await asyncio.sleep(2)
+            bef = snapshot()
+            if not await trigger():
+                continue
+            print("  ⏳", end="", flush=True)
+            cf, el = await poll(bef)
+            aw[i] = el
+            if not cf:
+                print(" ✗ timeout"); continue
+            cfiles[i] = cf
+            m = metrics(cf)
+            print(f" ✓  wall={el:.0f}s | agent={fmt(m['at'])}s | llm={fmt(m['llm'])} | steps={m['actions']} | pruned={fmt(m['pruned'])}")
+        p1_total = time.perf_counter() - p1
+        print(f"\n  Phase 1 total: {p1_total:.0f}s\n")
+
+        # ── Verify before Phase 2 ─────────────────────────────────────────────
+        print("=" * 70)
+        print("VERIFICATION — Confirming all cache entries are saved")
+        print("=" * 70)
+        all_ready = False
+        verify_deadline = time.time() + 60
+        while not all_ready and time.time() < verify_deadline:
+            await asyncio.sleep(3)
+            missing = []
+            for i, s in enumerate(SAMPLES):
+                if cfiles[i] is None:
+                    missing.append(f"[{i+1}] {s['name']} — cache file not found")
+                    continue
+                try:
+                    d = json.loads(cfiles[i].read_text())
+                    if not d.get("agentic_metrics"):
+                        missing.append(f"[{i+1}] {s['name']} — agentic_metrics not yet written")
+                    if not d.get("actions"):
+                        missing.append(f"[{i+1}] {s['name']} — actions list empty")
+                except Exception as e:
+                    missing.append(f"[{i+1}] {s['name']} — read error: {e}")
+            if missing:
+                print(f"  ⏳ Waiting for {len(missing)} cache(s)...")
+                for msg in missing[:3]:
+                    print(f"     {msg}")
+            else:
+                all_ready = True
+
+        if not all_ready:
+            print("  ⚠  Some caches not confirmed — proceeding anyway")
+        else:
+            print(f"  ✅ All {sum(1 for f in cfiles if f)} verified. Starting Phase 2.\n")
 
     # ── Phase 2: Cache hits ───────────────────────────────────────────────────
     p2 = time.perf_counter()
