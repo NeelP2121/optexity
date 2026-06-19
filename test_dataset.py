@@ -29,7 +29,9 @@ import httpx
 SERVER_URL = "http://localhost:9000/inference"
 ENDPOINT   = os.environ.get("OPTEXITY_TEST_ENDPOINT", "navigate_from_optexity_dashboard-9ad4c495")
 CACHE_DIR  = Path.home() / ".optexity_cache"
-AUTO_PATH  = Path("test_automation.json")
+# test_automation.json lives one level above this script (project root),
+# regardless of where the script is invoked from.
+AUTO_PATH  = Path(__file__).resolve().parent.parent / "test_automation.json"
 POLL_INTERVAL = 3
 RUN_TIMEOUT   = 300
 
