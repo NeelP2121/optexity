@@ -55,6 +55,31 @@ class CachedAction(BaseModel):
     """Number of times this cached step has failed."""
 
 
+class RunMetrics(BaseModel):
+    """Performance metrics for a single execution run."""
+
+    elapsed_seconds: float
+    """Wall-clock time for this run."""
+
+    llm_calls: int = 0
+    """Number of LLM API calls made (0 for cache hits)."""
+
+    step_count: int = 0
+    """Number of agent/action steps executed."""
+
+    raw_step_count: int | None = None
+    """Raw actions before pruning (agentic runs only)."""
+
+    pruned_count: int | None = None
+    """Steps removed by the optimizer (agentic runs only)."""
+
+    was_cache_hit: bool = False
+    """True if this run replayed from cache rather than running the agent."""
+
+    locators_upgraded: int = 0
+    """Number of locators upgraded to more stable versions during replay."""
+
+
 class AgenticTaskCache(BaseModel):
     """Full cache entry for one agentic task + URL combination."""
 
@@ -76,5 +101,45 @@ class AgenticTaskCache(BaseModel):
     actions: list[CachedAction] = Field(default_factory=list)
     """Ordered list of deterministic steps to replay."""
 
+    # ── Performance metrics ──────────────────────────────────────────────────
+    agentic_metrics: RunMetrics | None = None
+    """Metrics from the first (agentic) run that established this cache."""
+
+    cache_hit_metrics: list[RunMetrics] = Field(default_factory=list)
+    """Metrics for each subsequent cache hit run — tracks improvement over time."""
+
     raw_history_summary: list[dict[str, Any]] | None = None
     """Serialized summary of the original agent history steps for debugging."""
+
+    def summary(self) -> dict[str, Any]:
+        """Return a human-readable comparison of agentic vs cache hit performance."""
+        if not self.agentic_metrics or not self.cache_hit_metrics:
+            return {"status": "insufficient data"}
+
+        avg_hit_time = sum(m.elapsed_seconds for m in self.cache_hit_metrics) / len(
+            self.cache_hit_metrics
+        )
+        speedup = (
+            self.agentic_metrics.elapsed_seconds / avg_hit_time
+            if avg_hit_time > 0
+            else 0
+        )
+
+        return {
+            "task_hash": self.task_hash,
+            "agentic": {
+                "time_s": round(self.agentic_metrics.elapsed_seconds, 2),
+                "llm_calls": self.agentic_metrics.llm_calls,
+                "steps": self.agentic_metrics.step_count,
+                "raw_steps": self.agentic_metrics.raw_step_count,
+                "pruned": self.agentic_metrics.pruned_count,
+            },
+            "cache_hit": {
+                "avg_time_s": round(avg_hit_time, 2),
+                "llm_calls": 0,
+                "steps": len(self.actions),
+                "runs": len(self.cache_hit_metrics),
+            },
+            "speedup": f"{speedup:.1f}x faster",
+            "llm_savings": f"100% ({self.agentic_metrics.llm_calls} calls → 0)",
+        }
