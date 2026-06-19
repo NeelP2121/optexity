@@ -20,15 +20,50 @@ logger = logging.getLogger(__name__)
 CACHE_DIR = Path(os.environ.get("OPTEXITY_CACHE_DIR", Path.home() / ".optexity_cache"))
 
 
-def compute_cache_key(task_text: str, base_url: str) -> str:
-    """Return a 16-char hex key derived from the task text and base URL.
+def _normalize_task_text(
+    task_text: str,
+    input_parameters: dict[str, list] | None,
+) -> str:
+    """Replace actual input parameter values with {{param_name}} placeholders.
 
-    The base URL is normalised (scheme + host only) so that query strings and
-    paths don't prevent cache hits for the same site.
+    This makes the cache key stable across runs with different parameter values.
+    e.g. "fill name as myname, city as SF" with input_parameters={"full_name":
+    ["myname"], "city": ["SF"]} → "fill name as {{full_name}}, city as {{city}}"
+    so a subsequent run with "fill name as John, city as NYC" reuses the same cache.
+    """
+    if not input_parameters:
+        return task_text.strip()
+    normalized = task_text.strip()
+    # Sort by value length descending to avoid partial replacements
+    pairs = [
+        (param_name, str(v))
+        for param_name, values in input_parameters.items()
+        for v in (values if isinstance(values, list) else [values])
+        if v
+    ]
+    pairs.sort(key=lambda x: len(x[1]), reverse=True)
+    for param_name, value in pairs:
+        normalized = normalized.replace(value, f"{{{{{param_name}}}}}")
+    return normalized
+
+
+def compute_cache_key(
+    task_text: str,
+    base_url: str,
+    input_parameters: dict[str, list] | None = None,
+) -> str:
+    """Return a 16-char hex key derived from the (normalised) task text and base URL.
+
+    The task text is normalised by replacing actual input parameter values with
+    {{param_name}} placeholders so that different parameter values for the same
+    workflow map to the same cache entry.
+    The base URL is normalised (scheme + host only) so query strings and paths
+    don't prevent cache hits for the same site.
     """
     parsed = urlparse(base_url)
     normalised_url = f"{parsed.scheme}://{parsed.netloc}".lower()
-    raw = f"{task_text.strip()}:{normalised_url}"
+    normalised_task = _normalize_task_text(task_text, input_parameters)
+    raw = f"{normalised_task}:{normalised_url}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 

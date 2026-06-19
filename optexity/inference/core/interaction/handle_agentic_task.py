@@ -179,7 +179,15 @@ async def handle_agentic_task(
         cache_key: str | None = None
         if not isinstance(agentic_task_action, CloseOverlayPopupAction):
             base_url = task.automation.url
-            cache_key = compute_cache_key(agentic_task_action.task, base_url)
+            # Normalize cache key: replace actual param values with {{names}}
+            # so "fill name as myname" and "fill name as John" share a cache entry
+            input_params = {
+                k: [str(v) for v in vs]
+                for k, vs in task.input_parameters.items()
+            } if task.input_parameters else None
+            cache_key = compute_cache_key(
+                agentic_task_action.task, base_url, input_params
+            )
             existing_cache = load_cache(cache_key)
 
             if existing_cache and existing_cache.actions:
@@ -189,7 +197,7 @@ async def handle_agentic_task(
                 )
                 t0 = time.perf_counter()
                 success, last_step, any_upgraded = await run_cached_actions(
-                    existing_cache.actions, task, memory, browser
+                    existing_cache.actions, task, memory, browser, input_params
                 )
                 elapsed = time.perf_counter() - t0
                 if success:
@@ -276,7 +284,7 @@ async def handle_agentic_task(
         ):
             try:
                 cached_actions = convert_history_to_cached_actions(
-                    agent_history, task.automation.url
+                    agent_history, task.automation.url, input_params
                 )
                 if cached_actions:
                     raw_count = len(cached_actions)

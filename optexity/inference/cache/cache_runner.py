@@ -32,7 +32,21 @@ from optexity.schema.task import Task
 logger = logging.getLogger(__name__)
 
 
-def build_interaction_action(ca: CachedAction) -> InteractionAction | None:
+def _resolve_param(value: str, input_parameters: dict[str, list] | None) -> str:
+    """Replace {{param_name}} with the actual runtime value from input_parameters."""
+    if not value or not input_parameters:
+        return value
+    if value.startswith("{{") and value.endswith("}}"):
+        param_name = value[2:-2]
+        values = input_parameters.get(param_name, [""])
+        return str(values[0]) if values else value
+    return value
+
+
+def build_interaction_action(
+    ca: CachedAction,
+    input_parameters: dict[str, list] | None = None,
+) -> InteractionAction | None:
     """Convert a CachedAction into the appropriate InteractionAction subtype.
 
     Returns None if the action cannot be converted (e.g., unsupported type).
@@ -52,7 +66,9 @@ def build_interaction_action(ca: CachedAction) -> InteractionAction | None:
             return InteractionAction(click_element=action)
 
         elif t == "input_text":
+            # Resolve {{param_name}} placeholders with runtime input_parameters
             text = p.get("text") or p.get("value") or ""
+            text = _resolve_param(text, input_parameters)
             action = InputTextAction(
                 command=ca.command,
                 prompt_instructions=ca.prompt_instructions,
@@ -169,6 +185,7 @@ async def run_cached_actions(
     task: Task,
     memory: Memory,
     browser: Browser,
+    input_parameters: dict[str, list] | None = None,
 ) -> tuple[bool, int, bool]:
     """Replay all cached actions deterministically.
 
@@ -188,7 +205,7 @@ async def run_cached_actions(
         if await _try_upgrade_locator(ca, browser):
             any_upgraded = True
 
-        interaction = build_interaction_action(ca)
+        interaction = build_interaction_action(ca, input_parameters)
         if interaction is None:
             logger.warning(f"[cache_runner] Could not build action for step {i}, aborting replay")
             return False, i, any_upgraded

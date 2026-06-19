@@ -156,9 +156,25 @@ def _element_description(el) -> str:
     return " ".join(parts)
 
 
+def _parameterize_value(
+    value: str,
+    input_parameters: dict[str, list] | None,
+) -> str:
+    """Replace a literal value with its {{param_name}} placeholder if it matches
+    any input parameter value. Returns the original value if no match found."""
+    if not input_parameters or not value:
+        return value
+    for param_name, values in input_parameters.items():
+        param_values = values if isinstance(values, list) else [values]
+        if value in [str(v) for v in param_values]:
+            return f"{{{{{param_name}}}}}"
+    return value
+
+
 def convert_history_to_cached_actions(
     history: AgentHistoryList,
     base_url: str,
+    input_parameters: dict[str, list] | None = None,
 ) -> list[CachedAction]:
     """Convert a completed AgentHistoryList into a list of CachedAction entries.
 
@@ -217,9 +233,16 @@ def convert_history_to_cached_actions(
             continue
 
         # --- Extract extra action-specific params (exclude index) ---
+        # For input_text actions, replace literal values with {{param_name}}
+        # so the cache entry works across different parameter values.
         extra_params: dict = {}
         if isinstance(action_params, dict):
-            extra_params = {k: v for k, v in action_params.items() if k != "index"}
+            for k, v in action_params.items():
+                if k == "index":
+                    continue
+                if k in ("text", "value") and isinstance(v, str):
+                    v = _parameterize_value(v, input_parameters)
+                extra_params[k] = v
 
         prompt = description or f"{optexity_type} on {command}"
 
