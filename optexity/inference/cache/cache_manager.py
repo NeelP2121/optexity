@@ -30,7 +30,16 @@ def _normalize_task_text(
     e.g. "fill name as myname, city as SF" with input_parameters={"full_name":
     ["myname"], "city": ["SF"]} → "fill name as {{full_name}}, city as {{city}}"
     so a subsequent run with "fill name as John, city as NYC" reuses the same cache.
+
+    Replacement strategy (most-specific-first to avoid false matches):
+    1. Try single-quoted form  'value' → '{{param_name}}'
+       Handles: "username 'admin'" → "username '{{username}}'"
+       Avoids:  "and password 'password'" replacing the label "password" as well
+    2. Fall back to word-boundary regex for unquoted values
+       Handles: "fill name as myname" → "fill name as {{full_name}}"
     """
+    import re
+
     if not input_parameters:
         return task_text.strip()
     normalized = task_text.strip()
@@ -43,7 +52,21 @@ def _normalize_task_text(
     ]
     pairs.sort(key=lambda x: len(x[1]), reverse=True)
     for param_name, value in pairs:
-        normalized = normalized.replace(value, f"{{{{{param_name}}}}}")
+        placeholder = f"{{{{{param_name}}}}}"
+        quoted_value = f"'{value}'"
+        quoted_placeholder = f"'{placeholder}'"
+        if quoted_value in normalized:
+            # Replace only the quoted form — preserves bare keyword uses of
+            # the same word (e.g. the label "password" in "and password 'password'")
+            normalized = normalized.replace(quoted_value, quoted_placeholder)
+        else:
+            # Value not in quotes — use word-boundary match to avoid partial
+            # replacements (e.g. "SF" should not match inside "NYSF")
+            normalized = re.sub(
+                r'(?<![a-zA-Z0-9])' + re.escape(value) + r'(?![a-zA-Z0-9])',
+                placeholder,
+                normalized,
+            )
     return normalized
 
 
