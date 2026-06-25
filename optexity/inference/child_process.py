@@ -573,6 +573,18 @@ def get_app_with_endpoints(is_aws: bool, child_id: int, port: int = -1):
                 task_data = response_data["task"]
 
                 task = Task.model_validate_json(task_data)
+                from optexity.schema.automation import Automation
+                with open("test_automation.json", "r") as f:
+                    automation = json.load(f)
+                    automation = Automation.model_validate(automation)
+                task.automation = automation
+                # Pull input_parameters directly from test_automation.json
+                # so test values (full_name, city, etc.) are available to
+                # the cache layer without touching the curl command
+                task.input_parameters = {
+                    k: [str(v) for v in vs]
+                    for k, vs in automation.parameters.input_parameters.items()
+                }
                 if task.use_proxy and settings.PROXY_URL is None:
                     raise ValueError(
                         "PROXY_URL is not set and is required when use_proxy is True"
