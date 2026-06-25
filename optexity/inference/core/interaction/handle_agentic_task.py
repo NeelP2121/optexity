@@ -293,6 +293,22 @@ async def handle_agentic_task(
         )
         logger.debug(f"Agentic task completed on browser_use {browser.cdp_url} ")
 
+        # Record agent token usage and cost metrics
+        if agent_history.usage:
+            from optexity.schema.token_usage import TokenUsage
+            usage_sum = agent_history.usage
+            agent_tokens = TokenUsage(
+                input_tokens=usage_sum.total_prompt_tokens,
+                output_tokens=usage_sum.total_completion_tokens,
+                total_tokens=usage_sum.total_tokens,
+                calculated_total_tokens=usage_sum.total_tokens,
+                input_cost=usage_sum.total_prompt_cost + usage_sum.total_prompt_cached_cost,
+                output_cost=usage_sum.total_completion_cost,
+                total_cost=usage_sum.total_cost,
+            )
+            memory.token_usage += agent_tokens
+            logger.info(f"[cache] Recorded agentic run token usage: {agent_tokens.model_dump()}")
+
         # ── Cache save + Bonus 1 + Bonus 2 ──────────────────────────────────
         if (
             cache_key is not None

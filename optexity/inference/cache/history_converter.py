@@ -130,9 +130,12 @@ def _best_command(el) -> tuple[str, int, str]:
         ):
             href = attrs.get("href", "").strip()
             if href and not href.startswith(("javascript:", "#", "mailto:")):
-                # Escape single quotes in href for use inside a double-quoted locator
+                # Escape single quotes in href for use inside a double-quoted locator.
+                # Use .first so that if the same href appears multiple times on the page
+                # (e.g. a tag link in both a quote row and the Top Ten Tags sidebar),
+                # we always click the first match instead of failing strict-mode.
                 safe_href = href.replace("'", "\\'")
-                return f"locator(\"a[href='{safe_href}']\")", 65, "href"
+                return f"locator(\"a[href='{safe_href}']\").first", 65, "href"
 
         raw = best["locator"]
         command = raw[5:] if raw.startswith("page.") else raw
